@@ -1,0 +1,16 @@
+# Core data generation and manipulation
+faker>=19.0.0
+pandas>=2.0.0
+
+# UUID generation (usually included in Python stdlib, but ensuring compatibility)
+uuid
+
+# Additional useful packages for data generation
+numpy>=1.24.0
+
+# Optional: For enhanced fake data generation
+mimesis>=11.0.0
+scikit-learn>=1.3.0
+
+# CSV handling (included with pandas, but explicit for clarity)
+# No additional CSV packages needed - pandas handles it
