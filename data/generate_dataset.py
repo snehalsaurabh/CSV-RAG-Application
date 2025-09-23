@@ -1,4 +1,4 @@
-import pandas as pdc
+import pandas as pd
 from faker import Faker
 import uuid
 import random
@@ -218,9 +218,8 @@ def generate_founder_data():
     
     # Company and location
     company_name = fake.company()
-    city = fake.city()
     country = fake.country()
-    location = f"{city}, {country}"
+    location = f"{country}"
     
     # Email (realistic looking)
     company_domain = company_name.lower().replace(' ', '').replace(',', '').replace('.', '').replace("'", '')[:15]
