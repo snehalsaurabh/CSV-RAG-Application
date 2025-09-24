@@ -19,7 +19,7 @@
 
 **Live Demo**:
 
-- **Frontend**: [Website](https://csv-rag-application-git-main-snehalsaurabhs-projects.vercel.app)
+- **Frontend**: [Website](csv-rag-application.vercel.app)
 - **API Documentation**: [Docs](https://csv-rag-application-1.onrender.com/docs)
 - **GitHub Repository**: [https://github.com/snehalsaurabh/CSV-RAG-Application](https://github.com/snehalsaurabh/CSV-RAG-Application)
 
