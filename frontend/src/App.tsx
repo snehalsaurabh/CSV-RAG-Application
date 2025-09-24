@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import ChatPage from './pages/ChatPage'
+import StatsPage from './pages/StatsPage'
 import './App.css'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+          <Route path="/stats" element={<ProtectedRoute><StatsPage /></ProtectedRoute>} />
           <Route path="*" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
         </Routes>
       </AuthProvider>

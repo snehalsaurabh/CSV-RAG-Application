@@ -35,4 +35,12 @@ export interface FounderDetails {
   notes: string
 }
 
+export interface StatsData {
+  total_founders: number
+  roles: Record<string, number>
+  stages: Record<string, number>
+  top_keywords: Record<string, number>
+  locations: number
+}
+
 

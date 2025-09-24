@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../lib/api'
 import type { FounderDetails, FounderResult, SearchQuery } from '../types'
 import ResultCard from '../components/ResultCard'
@@ -106,6 +107,9 @@ export default function ChatPage() {
       <header className="header">
         <h2>Founder RAG Chat</h2>
         <div className="header-actions">
+          <Link to="/stats">
+            <button>📊 View Stats</button>
+          </Link>
           <button onClick={logout}>Logout</button>
         </div>
       </header>
