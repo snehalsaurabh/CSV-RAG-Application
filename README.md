@@ -1,4 +1,4 @@
-# Founder RAG Chat - Technical Documentation
+# Founder RAG Chat - Design Note/Technical Documentation
 
 ## Table of Contents
 
@@ -120,7 +120,7 @@ python-dotenv>=1.0.0      # Environment variable management
 
 ### Infrastructure
 
-- **Backend Hosting**: Render.com (Starter tier - 1GB RAM)
+- **Backend Hosting**: Render.com (Standard tier - 2GB RAM)
 - **Frontend Hosting**: Vercel (Edge deployment)
 - **Database**: In-memory (demonstration purposes)
 - **Vector Search**: FAISS in-memory index
@@ -137,16 +137,20 @@ python-dotenv>=1.0.0      # Environment variable management
 # Using sentence-transformers for semantic embeddings
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-# Comprehensive text creation for embedding
-def create_searchable_text(row):
-    return f"""Founder: {row['founder_name']} | 
-             Role: {row['role']} | 
-             Company: {row['company']} | 
-             Location: {row['location']} | 
-             Keywords: {row['keywords']} | 
-             Idea: {row['idea']} | 
-             About: {row['about']}"""
+# Comprehensive text creation for embedding (from rag.py)
+texts = []
+for _, row in self.founders_df.iterrows():
+    text = (f"Founder: {row['founder_name']} | "
+           f"Role: {row['role']} | "
+           f"Company: {row['company']} | "
+           f"Location: {row['location']} | "
+           f"Stage: {row['stage']} | "
+           f"Keywords: {row['keywords']} | "
+           f"Idea: {row['idea']} | "
+           f"About: {row['about']}")
+    texts.append(text)
 
+# Generate embeddings with progress tracking
 embeddings = model.encode(texts, show_progress_bar=True)
 ```
 
@@ -154,51 +158,137 @@ embeddings = model.encode(texts, show_progress_bar=True)
 #### 2. Vector Indexing with FAISS
 
 ```python
-# Cosine similarity search using inner product after normalization
-dimension = embeddings.shape[^1]  # 384 for all-MiniLM-L6-v2
-index = faiss.IndexFlatIP(dimension)
-faiss.normalize_L2(embeddings)
-index.add(embeddings.astype('float32'))
+# Create FAISS index for cosine similarity search
+dimension = self.embeddings.shape[1]  # 384 dimensions for all-MiniLM-L6-v2
+index = faiss.IndexFlatIP(dimension)  # Inner product index
+
+# Normalize embeddings for cosine similarity calculation
+faiss.normalize_L2(self.embeddings)
+index.add(self.embeddings.astype('float32'))
 ```
 
 
 #### 3. Search Pipeline
 
 ```python
-def search_founders(query: str, limit: int = 5):
-    # 1. Generate query embedding
-    query_embedding = model.encode([query])
-    faiss.normalize_L2(query_embedding)
-    
-    # 2. Vector similarity search
-    scores, indices = index.search(query_embedding.astype('float32'), limit)
-    
-    # 3. Generate explanations using Gemini
-    for score, idx in zip(scores[^0], indices[^0]):
-        founder = founders_df.iloc[idx]
-        snippet = generate_explanation_with_gemini(query, founder)
-        # Return structured results with provenance
+def search_founders(self, query: str, limit: int = 5) -> List[dict]:
+    """Search for founders using vector similarity with comprehensive results"""
+    try:
+        if self.model is None or self.index is None:
+            return []
+        
+        # 1. Generate and normalize query embedding
+        query_embedding = self.model.encode([query])
+        faiss.normalize_L2(query_embedding)
+        
+        # 2. Vector similarity search using FAISS
+        scores, indices = self.index.search(query_embedding.astype('float32'), limit)
+        
+        results = []
+        for score, idx in zip(scores[0], indices[0]):
+            if idx < len(self.founders_df):
+                founder = self.founders_df.iloc[idx]
+                
+                # 3. Generate AI-powered explanations
+                snippet = self.generate_match_explanation_gemini(query, founder)
+                matched_fields = self.identify_matched_fields(query, founder)
+                
+                # 4. Structure results with full provenance
+                result = {
+                    "id": founder['id'],
+                    "founder_name": founder['founder_name'],
+                    "role": founder['role'],
+                    "company": founder['company'],
+                    "location": founder['location'],
+                    "snippet": snippet,
+                    "similarity_score": float(score),
+                    "matched_fields": matched_fields,
+                    "row_id": int(idx)
+                }
+                results.append(result)
+        
+        return results
+        
+    except Exception as e:
+        print(f"❌ Error in search: {e}")
+        return []
 ```
 
 
 #### 4. Explanation Generation
 
 ```python
-def generate_match_explanation_gemini(query: str, founder):
-    prompt = f"""
-    Query: "{query}"
-    
-    Founder Profile: [profile data]
-    
-    Generate a concise 1-2 sentence explanation of why this founder 
-    matches the query. Focus on most relevant matching aspects. 
-    Start with "Matched on" and cite specific fields.
-    """
-    
-    response = gemini_model.generate_content(prompt)
-    return response.text.strip()
+def generate_match_explanation_gemini(self, query: str, founder) -> str:
+    """Generate match explanations using Google Gemini AI with fallback"""
+    try:
+        if self.gemini_model is None:
+            return self.generate_match_explanation_fallback(query, founder)
+        
+        prompt = f"""
+        Query: "{query}"
+        
+        Founder Profile:
+        - Name: {founder['founder_name']}
+        - Role: {founder['role']}
+        - Company: {founder['company']}
+        - Location: {founder['location']}
+        - Keywords: {founder['keywords']}
+        - About: {founder['about']}
+        - Idea: {founder['idea']}
+        - Stage: {founder['stage']}
+        
+        Generate a concise 1-2 sentence explanation of why this founder 
+        matches the query. Focus on the most relevant matching aspects. 
+        Start with "Matched on" and cite specific fields.
+        
+        Example: "Matched on keywords: healthtech, AI and role: Founder 
+        with experience in building diagnostic platforms for early disease detection."
+        """
+        
+        response = self.gemini_model.generate_content(prompt)
+        return response.text.strip()
+        
+    except Exception as e:
+        print(f"❌ Gemini API error: {e}")
+        return self.generate_match_explanation_fallback(query, founder)
 ```
 
+#### 5. Field-Level Match Identification
+
+```python
+def identify_matched_fields(self, query: str, founder) -> List[str]:
+    """Identify which specific fields contributed to the match for citation"""
+    matched = []
+    query_lower = query.lower()
+    
+    # Check keyword matches
+    keywords = [k.strip().lower() for k in founder['keywords'].split(',')]
+    if any(keyword in query_lower for keyword in keywords):
+        matched.append("keywords")
+    
+    # Check role, location, company, stage matches
+    if founder['role'].lower() in query_lower:
+        matched.append("role")
+    if founder['company'].lower() in query_lower:
+        matched.append("company")
+    if any(loc.lower() in query_lower for loc in founder['location'].split(', ')):
+        matched.append("location")
+    if founder['stage'].lower() in query_lower:
+        matched.append("stage")
+    
+    # Check semantic matches in text fields
+    about_words = set(founder['about'].lower().split())
+    idea_words = set(founder['idea'].lower().split())
+    query_words = set(query_lower.split())
+    
+    if about_words.intersection(query_words):
+        matched.append("about")
+    if idea_words.intersection(query_words):
+        matched.append("idea")
+    
+    # Return matched fields or default to keywords/about
+    return matched if matched else ["keywords", "about"]
+```
 
 ### Authentication System
 
@@ -206,25 +296,54 @@ def generate_match_explanation_gemini(query: str, founder):
 
 ```python
 from passlib.context import CryptContext
-from jose import jwt
+from jose import JWTError, jwt
 from datetime import datetime, timezone, timedelta
 
-# Secure password hashing
+# Secure password hashing with bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=30)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+# Hardcoded demo users (FOR DEMONSTRATION ONLY) - use secure DB in production
+USERS_DB = {
+    "demo": "$2b$12$xyZc9jWa0iMifjL9BrZ31.ZpHfc.ysr3KP6LpAC3DX8nbfmdc63he",  # demo
+    "admin": "$2b$12$.QcUVLxReQlfviq0X3hCOOLjCfFubuaf6AIUh1cQXOzQqzDCNf8k2",  # demo
+    "reviewer": "$2b$12$UNstFuAza1Epla3EvC0HhuCB4vqn13tEp38EfDbC4ffPZDpzIm0lC"  # demo
+}
 
-# Proper token validation with expiration checking
-def verify_token(credentials):
-    payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=["HS256"])
-    exp = payload.get("exp")
-    if datetime.now(timezone.utc).timestamp() > exp:
-        raise HTTPException(status_code=401, detail="Token expired")
-    return payload.get("sub")
+def create_access_token(data: dict):
+    """Create JWT token with timezone-aware expiration"""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify JWT token with comprehensive validation"""
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Proper expiration checking
+        exp = payload.get("exp")
+        if exp is None:
+            raise HTTPException(status_code=401, detail="Token missing expiration")
+        
+        if datetime.now(timezone.utc).timestamp() > exp:
+            raise HTTPException(status_code=401, detail="Token expired")
+            
+        return username
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password using bcrypt with error handling"""
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        print(f"Password verification error: {e}")
+        return False
 ```
 
 **Note**: For this demonstration, we use hardcoded bcrypt hashes. In production, passwords would be properly hashed during user registration.
@@ -349,7 +468,7 @@ AntlerIndia/
 Build Command: pip install -r requirements.txt
 Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 Root Directory: backend
-Instance Type: Starter ($25/month for 1GB RAM)
+Instance Type: Standard ($25/month for 2GB RAM)
 
 # Environment Variables in Render Dashboard
 SECRET_KEY=production-secret-key-256-bits
@@ -401,6 +520,8 @@ app.add_middleware(
 
 
 ### Production Security Measures
+
+The following will be applied when moving to production:
 
 #### Password Security
 
@@ -527,8 +648,9 @@ def log_search_event(query: str, results_count: int, response_time: float):
     })
 ```
 
-
 ## Production Best Practices
+
+The following best practices will be implemented when moving to production:
 
 ### Infrastructure Scaling
 
@@ -656,9 +778,9 @@ async def health_check():
 
 ### Live Application
 
-- **Frontend**: [https://antler-rag-frontend.vercel.app](https://antler-rag-frontend.vercel.app)
-- **API Documentation**: [https://antler-rag-backend.onrender.com/docs](https://antler-rag-backend.onrender.com/docs)
-- **GitHub Repository**: [Repository Link]
+- **Frontend**: [Website](https://csv-rag-application-git-main-snehalsaurabhs-projects.vercel.app)
+- **API Documentation**: [Docs](https://csv-rag-application-1.onrender.com/docs)
+- **GitHub Repository**: [https://github.com/snehalsaurabh/CSV-RAG-Application](https://github.com/snehalsaurabh/CSV-RAG-Application)
 
 
 ### Demo Credentials
@@ -697,9 +819,7 @@ All demo accounts use the same password for simplicity:
 **Completion Time**: ~8 hours of focused development
 **AI Assistance**: Used GitHub Copilot for boilerplate code generation and debugging
 
-```
-<div style="text-align: center">⁂</div>
-```
 
-[^1]: paste.txt
+
+
 
