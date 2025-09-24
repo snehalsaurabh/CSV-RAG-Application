@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 
 export default function ChatPage() {
   const { logout } = useAuth()
-  const [query, setQuery] = useState('healthtech founder in India with AI background')
+  const [query, setQuery] = useState('healthtech founder with AI background')
   // Limit parsing: accept optional trailing "limit:N" token in the query; default 10
   const [limit, setLimit] = useState<number>(10)
   const [loading, setLoading] = useState(false)

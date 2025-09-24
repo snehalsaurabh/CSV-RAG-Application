@@ -19,9 +19,9 @@
 
 **Live Demo**:
 
-- Frontend: `https://antler-rag-frontend.vercel.app`
-- Backend API: `https://antler-rag-backend.onrender.com`
-- API Docs: `https://antler-rag-backend.onrender.com/docs`
+- **Frontend**: [Website](https://csv-rag-application-git-main-snehalsaurabhs-projects.vercel.app)
+- **API Documentation**: [Docs](https://csv-rag-application-1.onrender.com/docs)
+- **GitHub Repository**: [https://github.com/snehalsaurabh/CSV-RAG-Application](https://github.com/snehalsaurabh/CSV-RAG-Application)
 
 **Demo Credentials**:
 
@@ -814,10 +814,10 @@ All demo accounts use the same password for simplicity:
 
 ***
 
-**Built with**: FastAPI, React, TypeScript, Sentence Transformers, FAISS, Gemini AI
-**Deployment**: Render.com (Backend) + Vercel (Frontend)
-**Completion Time**: ~8 hours of focused development
-**AI Assistance**: Used GitHub Copilot for boilerplate code generation and debugging
+- **Built with**: FastAPI, React, TypeScript, Sentence Transformers, FAISS, Gemini AI
+- **Deployment**: Render.com (Backend) + Vercel (Frontend)
+- **Completion Time**: ~10 hours of focused development
+- **AI Assistance**: Used GitHub Copilot for boilerplate code generation and debugging
 
 
 
