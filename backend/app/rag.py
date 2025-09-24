@@ -4,6 +4,7 @@ import faiss
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 import os
+import re
 from typing import List, Tuple
 from dotenv import load_dotenv
 
@@ -253,23 +254,145 @@ class RAGService:
         return founder_dict
     
     def get_stats(self) -> dict:
-        """Get dataset statistics"""
+        """Get comprehensive dataset statistics showcasing diversity"""
         if self.founders_df is None:
             return {"error": "Dataset not loaded"}
         
-        # Get keyword frequency
+        # Basic stats
+        total_founders = len(self.founders_df)
+        unique_locations = self.founders_df['location'].nunique()
+        unique_companies = self.founders_df['company'].nunique()
+        
+        # Keywords analysis - more detailed
         all_keywords = []
         for keywords_str in self.founders_df['keywords']:
-            all_keywords.extend([k.strip() for k in keywords_str.split(',')])
+            if pd.notna(keywords_str):
+                all_keywords.extend([k.strip() for k in keywords_str.split(',')])
         
-        keyword_counts = pd.Series(all_keywords).value_counts().head(10).to_dict()
+        keyword_counts = pd.Series(all_keywords).value_counts()
+        top_keywords = keyword_counts.head(15).to_dict()
+        total_unique_keywords = len(keyword_counts)
+        
+        # Extract backgrounds/previous experience
+        backgrounds = []
+        skills = []
+        achievements = []
+        
+        for about_text in self.founders_df['about']:
+            if pd.notna(about_text):
+                # Extract company backgrounds
+                if 'Former' in about_text or 'Ex-' in about_text:
+                    # Find patterns like "Former Google", "Ex-McKinsey", etc.
+                    bg_patterns = re.findall(r'(?:Former|Ex-)[\s]?([A-Za-z&\s]+?)(?:\s(?:engineer|consultant|manager|executive|researcher|analyst|PM|designer|developer|lead|associate))', about_text)
+                    backgrounds.extend([bg.strip() for bg in bg_patterns])
+                
+                # Extract skills (look for "expertise in")
+                if 'expertise in' in about_text:
+                    skill_text = about_text.split('expertise in')[1].split('.')[0]
+                    extracted_skills = [s.strip() for s in skill_text.split(',')]
+                    skills.extend(extracted_skills)
+                
+                # Extract achievements
+                if 'Previously' in about_text:
+                    achievement_text = about_text.split('Previously')[1].split('.')[0]
+                    achievements.append(achievement_text.strip())
+        
+        # Clean and count backgrounds
+        background_counts = {}
+        for bg in backgrounds:
+            clean_bg = bg.strip()
+            if len(clean_bg) > 2 and len(clean_bg) < 30:  # Filter reasonable company names
+                background_counts[clean_bg] = background_counts.get(clean_bg, 0) + 1
+        
+        # Get top backgrounds
+        top_backgrounds = dict(sorted(background_counts.items(), key=lambda x: x[1], reverse=True)[:12])
+        
+        # Skills analysis
+        skill_counts = {}
+        for skill in skills:
+            clean_skill = skill.strip()
+            if len(clean_skill) > 3 and len(clean_skill) < 40:
+                skill_counts[clean_skill] = skill_counts.get(clean_skill, 0) + 1
+        
+        top_skills = dict(sorted(skill_counts.items(), key=lambda x: x[1], reverse=True)[:15])
+        
+        # Geographic diversity - extract countries/regions
+        location_counts = self.founders_df['location'].value_counts().head(20).to_dict()
+        
+        # Company stage distribution
+        stage_counts = self.founders_df['stage'].value_counts().to_dict()
+        
+        # Role distribution  
+        role_counts = self.founders_df['role'].value_counts().to_dict()
+        
+        # Industry focus (group related keywords)
+        industry_mapping = {
+            'Technology': ['AI', 'machine learning', 'blockchain', 'cybersecurity', 'IoT', 'AR', 'VR', 'robotics'],
+            'Business & Finance': ['fintech', 'SaaS', 'marketplace', 'analytics', 'automation'],
+            'Health & Life Sciences': ['healthtech', 'biotech', 'fitness'],
+            'Consumer & Retail': ['e-commerce', 'retail', 'fashion', 'beauty', 'gaming'],
+            'Infrastructure & Tools': ['cloud', 'developer tools', 'productivity', 'logistics'],
+            'Sustainability & Energy': ['cleantech', 'energy', 'agriculture'],
+            'Media & Content': ['adtech', 'social', 'mobile'],
+            'Real Estate & Property': ['proptech'],
+            'Education': ['edtech'],
+            'Food & Hospitality': ['foodtech', 'travel']
+        }
+        
+        industry_stats = {}
+        for industry, keywords in industry_mapping.items():
+            count = sum(keyword_counts.get(keyword, 0) for keyword in keywords)
+            if count > 0:
+                industry_stats[industry] = count
+        
+        # Email domain analysis for company diversity
+        domains = []
+        for email in self.founders_df['email']:
+            if pd.notna(email) and '@' in email:
+                domain = email.split('@')[1].split('.')[0]
+                domains.append(domain)
+        
+        domain_diversity = len(set(domains))
         
         return {
-            "total_founders": len(self.founders_df),
-            "roles": self.founders_df['role'].value_counts().to_dict(),
-            "stages": self.founders_df['stage'].value_counts().to_dict(),
-            "top_keywords": keyword_counts,
-            "locations": len(self.founders_df['location'].unique())
+            # Core metrics
+            "total_founders": int(total_founders),
+            "unique_companies": int(unique_companies),
+            "unique_locations": int(unique_locations),
+            "domain_diversity": int(domain_diversity),
+            
+            # Role & Stage breakdown
+            "roles": {str(k): int(v) for k, v in role_counts.items()},
+            "stages": {str(k): int(v) for k, v in stage_counts.items()},
+            
+            # Skills & Background diversity
+            "top_backgrounds": {str(k): int(v) for k, v in top_backgrounds.items()},
+            "total_unique_backgrounds": int(len(background_counts)),
+            "top_skills": {str(k): int(v) for k, v in top_skills.items()},
+            "total_unique_skills": int(len(skill_counts)),
+            
+            # Industry & Technology focus
+            "industry_distribution": {str(k): int(v) for k, v in industry_stats.items()},
+            "top_keywords": {str(k): int(v) for k, v in top_keywords.items()},
+            "total_unique_keywords": int(total_unique_keywords),
+            
+            # Geographic diversity
+            "top_locations": {str(k): int(v) for k, v in location_counts.items()},
+            "geographic_coverage": int(unique_locations),
+            
+            # Achievement diversity
+            "sample_achievements": [str(achievement) for achievement in achievements[:10]] if achievements else [],
+            "total_documented_achievements": int(len(achievements)),
+            
+            # Diversity metrics
+            "diversity_score": {
+                "role_diversity": int(len(role_counts)),
+                "stage_diversity": int(len(stage_counts)), 
+                "keyword_diversity": int(total_unique_keywords),
+                "location_diversity": int(unique_locations),
+                "background_diversity": int(len(background_counts)),
+                "skill_diversity": int(len(skill_counts))
+            }
         }
     
     def is_ready(self) -> bool:
