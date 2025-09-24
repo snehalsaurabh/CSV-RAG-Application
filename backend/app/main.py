@@ -7,6 +7,7 @@ import uvicorn
 from .models import *
 from .auth import get_current_user, authenticate_user, create_access_token
 from .rag import rag_service
+from .validation import validate_search_query, validate_limit
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,12 +43,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - Secure but demo-friendly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173", 
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -73,7 +79,11 @@ async def health_check():
 # Authentication endpoints
 @app.post("/auth/login", response_model=Token, tags=["Authentication"])
 async def login(user_data: UserLogin):
-    username = authenticate_user(user_data.username, user_data.password)
+    # Basic input validation
+    if not user_data.username or not user_data.password:
+        raise HTTPException(status_code=400, detail="Username and password required")
+    
+    username = authenticate_user(user_data.username.lower().strip(), user_data.password)
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -84,21 +94,21 @@ async def login(user_data: UserLogin):
     access_token = create_access_token(data={"sub": username})
     return Token(access_token=access_token, token_type="bearer")
 
-# Search endpoints
+# Search endpoints with validation but NO rate limiting
 @app.post("/search", response_model=List[FounderResult], tags=["Search"])
 async def search_founders(
     query: SearchQuery, 
     current_user: str = Depends(get_current_user)
 ):
-    if not query.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    # Validate query
+    validated_query = validate_search_query(query.query)
+    validated_limit = validate_limit(query.limit)
     
     if not rag_service.is_ready():
         raise HTTPException(status_code=503, detail="RAG system not ready")
     
-    results = rag_service.search_founders(query.query, query.limit)
+    results = rag_service.search_founders(validated_query, validated_limit)
     
-    # Convert to FounderResult objects
     founder_results = []
     for result in results:
         founder_results.append(FounderResult(**result))
@@ -110,7 +120,11 @@ async def get_founder_details(
     founder_id: str, 
     current_user: str = Depends(get_current_user)
 ):
-    founder_data = rag_service.get_founder_by_id(founder_id)
+    # Basic validation
+    if not founder_id or not founder_id.strip():
+        raise HTTPException(status_code=400, detail="Founder ID required")
+    
+    founder_data = rag_service.get_founder_by_id(founder_id.strip())
     
     if founder_data is None:
         raise HTTPException(status_code=404, detail="Founder not found")
@@ -125,13 +139,13 @@ async def get_statistics(current_user: str = Depends(get_current_user)):
 @app.post("/demo/search", response_model=List[FounderResult], tags=["Demo"])
 async def demo_search(query: SearchQuery):
     """Demo endpoint for testing - no auth required"""
-    if not query.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    validated_query = validate_search_query(query.query)
     
     if not rag_service.is_ready():
         raise HTTPException(status_code=503, detail="RAG system not ready")
     
-    results = rag_service.search_founders(query.query, min(query.limit, 3))  # Limit to 3 for demo
+    # Limit demo results to 3
+    results = rag_service.search_founders(validated_query, min(query.limit or 3, 3))
     
     founder_results = []
     for result in results:
